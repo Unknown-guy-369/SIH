@@ -1,58 +1,116 @@
-# run_allocation.py
-import argparse
-from utils import read_applicants, read_internships, write_allocations
-from preprocessing import split_skills_field
-from matcher import compute_match_score, hybrid_match
-from allocator import greedy_allocate, ortools_allocate
+# main.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
+from uuid import uuid4
 
-def build_pairs(applicants, internships):
-    pairs = []
-    # map internship id to req skills list
-    int_map = {i["id"]: i for i in internships}
-    for app in applicants:
-        applied_id = app.get("applied_id") or app.get("applied_internship_id") or app.get("appliedTo") or ""
-        # If applicant didn't apply to a specific internship, we consider all internships (optional)
-        if applied_id:
-            jobs = [int_map[applied_id]] if applied_id in int_map else []
-        else:
-            jobs = internships
-        cand_skills = split_skills_field(app.get("skills",""))
-        for job in jobs:
-            req_skills = split_skills_field(job.get("req_text") or job.get("req_skills") or job.get("requirements",""))
-            # first do hybrid matching to get matched skill list
-            matched = hybrid_match(cand_skills, req_skills)
-            score = compute_match_score(cand_skills + matched, req_skills)
-            pairs.append({
-                "app_id": app["id"],
-                "app_name": app.get("name",""),
-                "int_id": job["id"],
-                "int_title": job.get("title",""),
-                "score": float(score),
-                "past_participation": int(app.get("past_participation", 0))
-            })
-    return pairs
+app = FastAPI()
 
-def main(args):
-    applicants = read_applicants(args.applicants)
-    internships = read_internships(args.internships)
-    pairs = build_pairs(applicants, internships)
+# -------------------------------
+# Data Models
+# -------------------------------
 
-    # choose allocator
-    if args.mode == "greedy":
-        allocations = greedy_allocate(pairs, internships, skip_prev_participation=args.skip_prev)
-    else:
-        allocations = ortools_allocate(pairs, applicants, internships)
+class Internship(BaseModel):
+    id: str
+    title: str
+    req_skills: str
+    seats: int
 
-    write_allocations(args.out, allocations)
-    print(f"Wrote {len(allocations)} allocations to {args.out}")
+class InternshipCreate(BaseModel):
+    title: str
+    req_skills: str
+    seats: int
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--applicants", default="data/applicants.csv")
-    parser.add_argument("--internships", default="data/internships.csv")
-    parser.add_argument("--out", default="allocations.csv")
-    parser.add_argument("--mode", choices=["greedy","ortools"], default="greedy")
-    parser.add_argument("--skip-prev", action="store_true", default=True,
-                        help="Skip applicants with past participation>0")
-    args = parser.parse_args()
-    main(args)
+class Applicant(BaseModel):
+    id: str
+    name: str
+    skills: str
+    applied_id: str
+    past_participation: int
+
+class Application(BaseModel):
+    id: str
+    student_name: str
+    internship_id: str
+    status: str = "Pending"
+
+class ApplicationCreate(BaseModel):
+    student_name: str
+    internship_id: str
+
+# -------------------------------
+# Sample Data (Prototype)
+# -------------------------------
+applicants: List[Applicant] = [
+    {"id": "A1", "name": "Alice", "skills": "pandas,numpy", "applied_id": "I1", "past_participation": 0},
+    {"id": "A2", "name": "Bob", "skills": "Flutter", "applied_id": "I2", "past_participation": 1},
+    {"id": "A3", "name": "Charlie", "skills": "React; javascript; css", "applied_id": "I3", "past_participation": 0},
+    {"id": "A4", "name": "Diana", "skills": "python; data analysis; pandas", "applied_id": "I1", "past_participation": 0},
+]
+
+internships: List[Internship] = [
+    {"id": "I1", "title": "Data Science Intern", "req_skills": "Python; Machine Learning; SQL", "seats": 2},
+    {"id": "I2", "title": "App Developer", "req_skills": "Flutter", "seats": 2},
+    {"id": "I3", "title": "Frontend Developer", "req_skills": "React; JavaScript; CSS", "seats": 4},
+]
+
+applications: List[Application] = []  # dynamic as students apply
+
+# -------------------------------
+# Industry APIs
+# -------------------------------
+@app.get("/industry/internships", response_model=List[Internship])
+def list_internships():
+    return internships
+
+@app.post("/industry/internships", response_model=Internship)
+def create_internship(internship: InternshipCreate):
+    new_internship = {
+        "id": str(uuid4()),
+        "title": internship.title,
+        "req_skills": internship.req_skills,
+        "seats": internship.seats,
+    }
+    internships.append(new_internship)
+    return new_internship
+
+# -------------------------------
+# Student APIs
+# -------------------------------
+@app.post("/student/apply", response_model=Application)
+def apply_internship(application: ApplicationCreate):
+    internship = next((i for i in internships if i["id"] == application.internship_id), None)
+    if not internship:
+        raise HTTPException(status_code=404, detail="Internship not found")
+
+    new_application = {
+        "id": str(uuid4()),
+        "student_name": application.student_name,
+        "internship_id": application.internship_id,
+        "status": "Pending"
+    }
+    applications.append(new_application)
+    return new_application
+
+@app.get("/student/applications/{student_name}", response_model=List[Application])
+def get_student_applications(student_name: str):
+    return [a for a in applications if a["student_name"] == student_name]
+
+# -------------------------------
+# Admin APIs
+# -------------------------------
+@app.get("/admin/applications", response_model=List[Application])
+def get_all_applications():
+    return applications
+
+@app.put("/admin/applications/{application_id}", response_model=Application)
+def update_application_status(application_id: str, status: str):
+    app_obj = next((a for a in applications if a["id"] == application_id), None)
+    if not app_obj:
+        raise HTTPException(status_code=404, detail="Application not found")
+    app_obj["status"] = status
+    return app_obj
+
+@app.get("/admin/applicants", response_model=List[Applicant])
+def list_applicants():
+    return applicants

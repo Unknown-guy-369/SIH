@@ -1,0 +1,6 @@
+id,name,skills,location,applied_id,past_participation
+1,Alice,"python, ml, data analysis",Delhi,101,0
+2,Bob,"java, spring, sql",Bangalore,102,0
+3,Charlie,"pyhton, excel, statistics",Delhi,101,1
+4,Deepa,"c++, problem solving, algorithms",Hyderabad,103,0
+5,Esha,"react, javascript, css",Bangalore,104,0

@@ -1,0 +1,5 @@
+id,title,req_skills,seats,location
+101,Data Analyst,"python, data analysis, ms excel",2,Delhi
+102,Backend Developer,"java, spring, sql",1,Bangalore
+103,Software Engineer,"c++, algorithms, problem solving",1,Hyderabad
+104,Frontend Developer,"javascript, react, css",2,Bangalore
