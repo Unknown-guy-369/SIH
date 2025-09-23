@@ -4,7 +4,8 @@ from rapidfuzz import fuzz, process
 from typing import List, Tuple
 from preprocessing import split_skills_field
 import logging
-# import util
+from sklearn.metrics.pairwise import cosine_similarity
+import torch
 
 USE_SBERT = True
 USE_FAISS = True
@@ -70,12 +71,12 @@ def hybrid_match(candidate_skills: List[str], required_skills: List[str],
                 for j in row:
                     if 0 <= j < len(reqs):
                         matches.add(reqs[j])
-                        print("used sbert")
+                
 
     return list(matches)
 
 
-def compute_match_score_cosine(candidate_skills: List[str], required_skills: List[str]) -> float:
+def compute_match_score(candidate_skills: List[str], required_skills: List[str]) -> float:
     """
     Compute semantic similarity between applicant and internship skills
     using SBERT embeddings + cosine similarity.
@@ -93,17 +94,17 @@ def compute_match_score_cosine(candidate_skills: List[str], required_skills: Lis
     req_emb  = SBERT_MODEL.encode(req_text, convert_to_tensor=True)
 
     # Compute cosine similarity
-    score = util.cos_sim(cand_emb, req_emb).item()
+    score=torch.nn.functional.cosine_similarity(cand_emb, req_emb, dim=0).item()
 
     # Normalize (in case of small negatives)
     return max(0.0, float(score))
 
-def compute_match_score(candidate_skills: List[str], required_skills: List[str]) -> float:
-    """Compute ratio of matched skills to total required"""
-    if not required_skills:
-        return 0.0
-    matched = set(candidate_skills) & set(required_skills)
-    hybrid = hybrid_match(candidate_skills, required_skills)
-    matched = matched.union(set(hybrid))
-    print(matched)
-    return len(matched) / float(len(required_skills))
+# def compute_match_score(candidate_skills: List[str], required_skills: List[str]) -> float:
+#     """Compute ratio of matched skills to total required"""
+#     if not required_skills:
+#         return 0.0
+#     matched = set(candidate_skills) & set(required_skills)
+#     hybrid = hybrid_match(candidate_skills, required_skills)
+#     matched = matched.union(set(hybrid))
+#     print("Matched",matched)
+#     return len(matched) / float(len(required_skills))

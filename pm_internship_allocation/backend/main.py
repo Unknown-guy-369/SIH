@@ -4,13 +4,13 @@ from pydantic import BaseModel
 from typing import List, Optional
 from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
+from run_allocation import run_allocation
+from fastapi import Query
 
 app = FastAPI()
 
 
 # Data Models
-
-
 
 class Internship(BaseModel):
     id: Optional[str] = None
@@ -34,10 +34,12 @@ class Application(BaseModel):
     student_id: str
     internship_id: str
     status: str = "Pending" 
+    student_skill:List[str]
 
 class ApplicationCreate(BaseModel):
     student_id: str
     internship_id: str
+    student_skill:List[str]
 
 
 # In-Memory Storage (prototype)
@@ -64,8 +66,9 @@ def list_internships():
 @app.post("/student/apply", response_model=Application)
 def apply_internship(application: ApplicationCreate):
     # check internship exists
-    print(internships)
+    
     internship = next((i for i in internships if i.id == application.internship_id), None)
+    print(internship)
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found")
     
@@ -73,9 +76,12 @@ def apply_internship(application: ApplicationCreate):
         id=str(uuid4()),
         student_id=application.student_id,
         internship_id=application.internship_id,
+        student_skill=application.student_skill
     )
     applications.append(new_application)
     print(applications)
+    # run = run_allocation(applicants=applications,internships=internships)
+    # print(run)
     return new_application
 
 @app.get("/student/applications/{student_name}", response_model=List[Application])
@@ -97,6 +103,51 @@ def update_application_status(application_id: str, status: str):
     
     app_obj.status = status
     return app_obj
+
+@app.post("/admin/run-allocation")
+def run_allocation_api(mode: str = "ortools"):
+    global allocations
+    print(applications,internships)
+    if not applications or not internships:
+        raise HTTPException(status_code=400, detail="No data available for allocation")
+
+    # Convert applications to applicant format (dicts)
+    applicants = [
+        {
+            "id": app.id,
+            "name": app.student_id,
+            "skills": ",".join(app.student_skill),
+            "applied_id": app.internship_id,
+            "past_participation": 0,
+        }
+        for app in applications
+    ]
+
+    # Convert internships to dicts
+    jobs = [
+        {
+            "id": i.id,
+            "title": i.title,
+            "req_skills": ";".join(i.skills),
+            "seats": i.positions,
+        }
+        for i in internships
+    ]
+
+    # Run allocation (pass list of dicts)
+    allocations = run_allocation(applicants, jobs, mode=mode)
+
+    # Update statuses in applications list
+    allocated_ids = {a["app_id"] for a in allocations}
+    for app in applications:
+        app.status = "allocated" if app.id in allocated_ids else "under_review"
+
+    return {"allocations": allocations, "count": len(allocations)}
+
+@app.get("/admin/allocations")
+def get_allocations():
+    return allocations
+
 
 # -------------------------------
 # CORS Middleware

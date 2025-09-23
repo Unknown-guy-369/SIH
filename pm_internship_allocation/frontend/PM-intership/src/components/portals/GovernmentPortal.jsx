@@ -21,7 +21,7 @@ import {
   TrendingUp,
   Award
 } from 'lucide-react';
-
+import axios from "axios"
 export default function GovernmentInternshipSystem() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -258,14 +258,47 @@ export default function GovernmentInternshipSystem() {
     </div>
   );
 
-  const AIMatchingEngine = () => (
+const AIMatchingEngine = () => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [matchingProgress, setMatchingProgress] = useState(0);
+  const [allocations, setAllocations] = useState([]);
+
+  // Trigger backend allocation
+  const handleRunMatching = async () => {
+    try {
+      setIsProcessing(true);
+      setMatchingProgress(10);
+
+      // Call FastAPI backend
+      const res = await axios.post("http://127.0.0.1:8000/admin/run-allocation");
+      
+      setMatchingProgress(70);
+      setAllocations(res.data.allocations); // store allocation results
+      
+      // Simulate progress completion
+      setTimeout(() => {
+        setMatchingProgress(100);
+        setIsProcessing(false);
+      }, 800);
+
+    } catch (error) {
+      console.error("Error running allocation:", error);
+      setIsProcessing(false);
+    }
+  };
+
+  return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <h3 className="text-lg font-semibold text-gray-900">AI Matching Engine Control Panel</h3>
-          <p className="text-sm text-gray-600 mt-1">Configure and monitor the automated matching process</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Configure and monitor the automated matching process
+          </p>
         </div>
+
         <div className="p-6">
+          {/* Parameters */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">Preprocessing Status</h4>
@@ -284,7 +317,7 @@ export default function GovernmentInternshipSystem() {
                 </div>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">Matching Parameters</h4>
               <div className="space-y-3">
@@ -303,20 +336,21 @@ export default function GovernmentInternshipSystem() {
               </div>
             </div>
           </div>
-          
+
+          {/* Run Allocation */}
           <div className="border-t pt-6">
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-medium text-gray-900">Run Matching Algorithm</h4>
               <button
-                onClick={() => setIsProcessing(true)}
+                onClick={handleRunMatching}
                 disabled={isProcessing}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
               >
                 <Brain className="h-4 w-4" />
-                <span>{isProcessing ? 'Processing...' : 'Start Matching'}</span>
+                <span>{isProcessing ? "Processing..." : "Start Matching"}</span>
               </button>
             </div>
-            
+
             {isProcessing && (
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
@@ -324,7 +358,7 @@ export default function GovernmentInternshipSystem() {
                   <span className="text-sm font-medium text-gray-700">{matchingProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${matchingProgress}%` }}
                   ></div>
@@ -332,10 +366,37 @@ export default function GovernmentInternshipSystem() {
               </div>
             )}
           </div>
+
+          {/* Show Allocations */}
+          {allocations.length > 0 && (
+            <div className="mt-6">
+              <h4 className="font-medium text-gray-900 mb-2">Allocation Results</h4>
+              <table className="w-full text-sm border rounded-lg overflow-hidden">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Student ID</th>
+                    <th className="px-3 py-2 text-left">Internship</th>
+                    <th className="px-3 py-2 text-left">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map((a, idx) => (
+                    <tr key={idx} className="border-t">
+                      <td className="px-3 py-2">{a.app_id}</td>
+                      <td className="px-3 py-2">{a.int_title}</td>
+                      <td className="px-3 py-2">{(a.score * 100).toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
         </div>
       </div>
     </div>
   );
+};
 
   const ApplicantManagement = () => (
     <div className="space-y-6">
